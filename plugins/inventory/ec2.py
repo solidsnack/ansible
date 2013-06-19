@@ -117,12 +117,20 @@ import boto
 from boto import ec2
 from boto import rds
 import ConfigParser
+import StringIO
 
 try:
     import json
 except ImportError:
     import simplejson as json
 
+default_conf = '''
+[ec2]
+destination_variable = public_dns_name
+vpc_destination_variable = ip_address
+cache_path = /tmp
+cache_max_age = 300
+'''
 
 class Ec2Inventory(object):
     def __init__(self):
@@ -176,7 +184,11 @@ class Ec2Inventory(object):
         ''' Reads the settings from the ec2.ini file '''
 
         config = ConfigParser.SafeConfigParser()
-        config.read(os.path.dirname(os.path.realpath(__file__)) + '/ec2.ini')
+        path = os.path.dirname(os.path.realpath(__file__)) + '/ec2.ini'
+        if os.access(path, os.F_OK):
+            config.read(path)
+        else:
+            config.readfp(StringIO.StringIO(default_conf))
 
         # is eucalyptus?
         self.eucalyptus_host = None
@@ -188,7 +200,10 @@ class Ec2Inventory(object):
 
         # Regions
         self.regions = []
-        configRegions = config.get('ec2', 'regions')
+        if config.has_option('ec2', 'regions'):
+            configRegions = config.get('ec2', 'regions')
+        else:
+            configRegions = os.getenv('AWS_REGION') or os.getenv('AWS_DEFAULT_REGION') or 'all'
         if (configRegions == 'all'):
             if self.eucalyptus_host:
                 self.regions.append(boto.connect_euca(host=self.eucalyptus_host).region.name)
